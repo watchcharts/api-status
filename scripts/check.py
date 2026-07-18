@@ -44,23 +44,33 @@ HISTORY_PATH = Path(__file__).resolve().parent.parent / "docs" / "data" / "histo
 
 
 def run_check(check: dict, api_key: str) -> dict:
-    from urllib.parse import urlencode
-    url = f"{BASE_URL}{check['path']}"
+    # Uses http.client (not urllib) so the API key header is sent with exact
+    # lowercase casing: urllib silently rewrites 'x-api-key' -> 'X-api-key'.
+    import http.client
+    from urllib.parse import urlencode, urlparse
+    parsed = urlparse(BASE_URL)
+    path = parsed.path + check["path"]
     if check["params"]:
-        url += "?" + urlencode(check["params"])
-    req = urllib.request.Request(url, headers={"x-api-key": api_key})
+        path += "?" + urlencode(check["params"])
     start = time.monotonic()
     code, err = None, None
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
-            resp.read()
-            code = resp.status
-    except urllib.error.HTTPError as e:
-        code = e.code
-        try:
-            err = json.loads(e.read().decode()).get("message")
-        except Exception:
-            err = str(e)
+        conn = http.client.HTTPSConnection(parsed.hostname, timeout=TIMEOUT_S)
+        conn.putrequest("GET", path, skip_host=True)
+        conn.putheader("Host", parsed.hostname)
+        conn.putheader("x-api-key", api_key)
+        conn.putheader("User-Agent", "watchcharts-status-monitor/1.0")
+        conn.putheader("Accept", "application/json")
+        conn.endheaders()
+        resp = conn.getresponse()
+        body = resp.read()
+        code = resp.status
+        if code != 200:
+            try:
+                err = json.loads(body.decode()).get("message")
+            except Exception:
+                err = body.decode(errors="replace")[:200]
+        conn.close()
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
     latency_ms = round((time.monotonic() - start) * 1000)
