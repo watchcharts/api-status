@@ -5,8 +5,8 @@ Pings a small set of endpoints, records status + latency into
 docs/data/history.json (pruned to RETENTION_DAYS). Designed to run from
 GitHub Actions on a cron schedule.
 
-Credit cost per run: 5 (brand/list=1, search/watch=1, watch/info=3).
-At a 10-minute cadence that's 720 credits per rolling 24h - use a
+Credit cost per run: 7 (search/watch=1, watch/info=3, watch/price_1y=3).
+At a 10-minute cadence that's ~1,008 credits per rolling 24h - use a
 dedicated API key with a per-key cap (https://watchcharts.com/api/keys).
 
 Env:
@@ -33,10 +33,11 @@ REQUEST_GAP_S = 1.1     # API allows 1 req/sec per key
 DAYTONA_UUID = "7901c9d7-22f9-4783-b5ce-48ee079a62ab"
 
 CHECKS = [
-    {"id": "brand_list", "name": "Brand catalog", "path": "/brand/list", "params": {}},
     {"id": "search_watch", "name": "Watch search", "path": "/search/watch",
      "params": {"brand_name": "rolex", "reference": "116500"}},
     {"id": "watch_info", "name": "Watch info", "path": "/watch/info",
+     "params": {"uuid": DAYTONA_UUID}},
+    {"id": "watch_price_1y", "name": "Price history (1y)", "path": "/watch/price_1y",
      "params": {"uuid": DAYTONA_UUID}},
 ]
 

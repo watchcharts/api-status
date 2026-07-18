@@ -5,13 +5,13 @@ Public uptime monitor for `api.watchcharts.com/v3`. A GitHub Actions cron runs
 `docs/data/history.json`, and GitHub Pages serves `docs/index.html` as the
 status page. No servers, no database.
 
-## What it checks (5 credits/run, ~720/rolling 24h)
+## What it checks (7 credits/run, ~1,008/rolling 24h)
 
 | Check | Endpoint | Credits |
 |---|---|---|
-| Brand catalog | `GET /brand/list` | 1 |
 | Watch search | `GET /search/watch` (Rolex 116500) | 1 |
 | Watch info | `GET /watch/info` (Daytona UUID) | 3 |
+| Price history (1y) | `GET /watch/price_1y` (Daytona UUID) | 3 |
 
 Status classification: `200` fast → **up**; `200` >3s → **degraded**; `429` or
 credit-limit `403` → **monitor_limited** (not counted as downtime); other 4xx →
@@ -22,7 +22,7 @@ credit-limit `403` → **monitor_limited** (not counted as downtime); other 4xx 
 Repo: https://github.com/watchcharts/api-status · Live: https://status.api.watchcharts.com
 
 1. Create a **dedicated API key** at https://watchcharts.com/api/keys and set a
-   per-key credit cap (e.g. 800) so monitoring can never starve production keys.
+   per-key credit cap (e.g. 1,200) so monitoring can never starve production keys.
 2. Add it as repo secret `WATCHCHARTS_API_KEY`
    (Settings → Secrets and variables → Actions).
 3. Enable GitHub Pages: Settings → Pages → Deploy from branch → `main` / `/docs`.
