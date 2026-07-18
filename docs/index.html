@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WatchCharts API Status</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b21; --border: #262a33;
+    --text: #e8eaed; --muted: #8b919c;
+    --up: #2fbf71; --degraded: #e6b23a; --down: #e4574f; --none: #2c313b;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         max-width: 860px; margin: 0 auto; padding: 40px 20px; }
+  header { display: flex; align-items: center; justify-content: space-between;
+           flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+  h1 { font-size: 20px; font-weight: 600; }
+  .banner { border-radius: 10px; padding: 16px 20px; font-weight: 600;
+            margin-bottom: 28px; color: #fff; }
+  .banner.up { background: var(--up); } .banner.degraded { background: var(--degraded); color:#1a1a1a; }
+  .banner.down { background: var(--down); } .banner.unknown { background: var(--none); }
+  .card { background: var(--card); border: 1px solid var(--border);
+          border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline;
+         flex-wrap: wrap; gap: 8px; }
+  .name { font-weight: 600; }
+  .path { color: var(--muted); font-family: ui-monospace, monospace; font-size: 13px; }
+  .pct { font-variant-numeric: tabular-nums; }
+  .bars { display: flex; gap: 2px; margin: 12px 0 6px; height: 32px; }
+  .bar { flex: 1; border-radius: 2px; background: var(--none); min-width: 2px; }
+  .bar.up { background: var(--up); } .bar.degraded { background: var(--degraded); }
+  .bar.down { background: var(--down); }
+  .legend { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .nav { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .nav a { color: var(--muted); }
+  .lat { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 32px; text-align: center; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>WatchCharts API Status</h1>
+    <nav class="nav">
+      <a href="https://watchcharts.com">watchcharts.com</a> ·
+      <a href="https://watchcharts.com/api">API docs &amp; plans</a>
+    </nav>
+  </div>
+  <span class="meta" id="updated">Loading…</span>
+</header>
+<div id="banner" class="banner unknown">Loading status…</div>
+<div id="endpoints"></div>
+<footer>
+  Checks run every 10 minutes against <code>api.watchcharts.com/v3</code>.
+  Uptime shown over the past 90 days.<br>
+  <a href="https://watchcharts.com">WatchCharts</a> ·
+  <a href="https://watchcharts.com/api">Get API access</a>
+</footer>
+
+<script>
+const DAYS = 90;
+
+const label = {up: "Operational", degraded: "Degraded performance",
+               down: "Outage", unknown: "Status unknown"};
+
+function dayStatus(entries) {
+  // worst status of the day: any down => down, else any degraded => degraded
+  if (!entries.length) return null;
+  let s = "up";
+  for (const e of entries) {
+    if (e === "down") return "down";
+    if (e === "degraded") s = "degraded";
+  }
+  return s;
+}
+
+async function main() {
+  let data;
+  try {
+    data = await (await fetch("data/history.json?t=" + Date.now())).json();
+  } catch (e) {
+    document.getElementById("banner").textContent = "Could not load status data.";
+    return;
+  }
+  const entries = data.entries || [];
+  const last = entries[entries.length - 1];
+  const banner = document.getElementById("banner");
+
+  // Overall current status = worst of the latest run (ignore monitor issues)
+  const rank = {up: 0, monitor_limited: 0, warn: 1, degraded: 1, down: 2};
+  let overall = "unknown";
+  if (last) {
+    const worst = Math.max(...last.checks.map(c => rank[c.status] ?? 0));
+    overall = ["up", "degraded", "down"][worst];
+    document.getElementById("updated").textContent =
+      "Last checked " + new Date(last.ts).toLocaleString();
+  }
+  banner.className = "banner " + overall;
+  banner.textContent = {up: "All systems operational",
+                        degraded: "Degraded performance",
+                        down: "Service disruption",
+                        unknown: "No data yet"}[overall];
+
+  // Bucket entries by UTC day per endpoint
+  const days = [];
+  const now = new Date();
+  for (let i = DAYS - 1; i >= 0; i--) {
+    const d = new Date(now); d.setUTCDate(d.getUTCDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const container = document.getElementById("endpoints");
+  for (const ep of data.endpoints || []) {
+    const byDay = Object.fromEntries(days.map(d => [d, []]));
+    const lats = [];
+    let okCount = 0, total = 0;
+    for (const en of entries) {
+      const c = en.checks.find(c => c.id === ep.id);
+      if (!c) continue;
+      const day = en.ts.slice(0, 10);
+      const s = (c.status === "monitor_limited" || c.status === "warn") ? "up" : c.status;
+      if (day in byDay) byDay[day].push(s);
+      total++; if (s !== "down") okCount++;
+      if (c.status === "up" || c.status === "degraded") lats.push(c.latency_ms);
+    }
+    const pct = total ? (100 * okCount / total).toFixed(2) : "–";
+    const avgLat = lats.length ? Math.round(lats.reduce((a, b) => a + b) / lats.length) : null;
+    const lastCheck = last && last.checks.find(c => c.id === ep.id);
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="row">
+        <span><span class="name">${ep.name}</span>
+              <span class="path">${ep.path}</span></span>
+        <span class="pct">${pct}% uptime</span>
+      </div>
+      <div class="bars">${days.map(d => {
+        const s = dayStatus(byDay[d]);
+        return `<div class="bar ${s ?? ""}" title="${d}${s ? ": " + label[s] : ": no data"}"></div>`;
+      }).join("")}</div>
+      <div class="legend"><span>${DAYS} days ago</span><span>Today</span></div>
+      <div class="lat">${lastCheck ? `Now: ${label[lastCheck.status] ?? lastCheck.status}
+        · ${lastCheck.latency_ms} ms` : ""}${avgLat ? ` · avg ${avgLat} ms` : ""}</div>`;
+    container.appendChild(card);
+  }
+}
+main();
+</script>
+</body>
+</html>

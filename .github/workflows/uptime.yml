@@ -1,0 +1,33 @@
+name: Uptime check
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (~720 credits / rolling 24h)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run checks
+        env:
+          WATCHCHARTS_API_KEY: ${{ secrets.WATCHCHARTS_API_KEY }}
+        run: python3 scripts/check.py
+
+      - name: Commit history
+        run: |
+          git config user.name "uptime-bot"
+          git config user.email "actions@github.com"
+          git add docs/data/history.json
+          git diff --cached --quiet || git commit -m "uptime: $(date -u +%FT%TZ)"
+          git pull --rebase origin ${{ github.ref_name }}
+          git push
