@@ -79,20 +79,24 @@ def run_check(check: dict, api_key: str) -> dict:
             "latency_ms": latency_ms, "error": err}
 
 
-def mock_results() -> list:
+def mock_results(down: bool = False) -> list:
     import random
-    return [{"id": c["id"], "status": "up", "code": 200,
-             "latency_ms": random.randint(120, 900), "error": None}
+    return [{"id": c["id"],
+             "status": "down" if down else "up",
+             "code": 503 if down else 200,
+             "latency_ms": random.randint(120, 900),
+             "error": "Service Unavailable" if down else None}
             for c in CHECKS]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mock", action="store_true", help="write fake results (no API calls)")
+    ap.add_argument("--mock-down", action="store_true", help="fake an outage (implies --mock)")
     args = ap.parse_args()
 
-    if args.mock:
-        results = mock_results()
+    if args.mock or args.mock_down:
+        results = mock_results(down=args.mock_down)
     else:
         api_key = os.environ.get("WATCHCHARTS_API_KEY")
         if not api_key:
@@ -121,12 +125,35 @@ def main() -> int:
 
     cutoff = (now - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     history["entries"] = [e for e in history.get("entries", []) if e["ts"] >= cutoff]
+
+    def is_down(e):
+        return any(c["status"] == "down" for c in e["checks"])
+
+    prev_down = is_down(history["entries"][-1]) if history["entries"] else False
+    now_down = is_down(entry)
+
     history["entries"].append(entry)
     HISTORY_PATH.write_text(json.dumps(history, separators=(",", ":")) + "\n")
 
+    # Emit transition for the workflow's incident automation
+    transition = "none"
+    if now_down and not prev_down:
+        transition = "down"
+    elif prev_down and not now_down:
+        transition = "recovered"
+    failed = [r for r in results if r["status"] == "down"]
+    details = "; ".join(f"{r['id']}: HTTP {r['code']} {r['error'] or ''}".strip()
+                        for r in failed) or "all checks passing"
+    gh_out = os.environ.get("GITHUB_OUTPUT")
+    if gh_out:
+        with open(gh_out, "a") as f:
+            f.write(f"transition={transition}\n")
+            f.write(f"details={details}\n")
+            f.write(f"ts={entry['ts']}\n")
+
     worst = max((r["status"] for r in results),
                 key=["up", "monitor_limited", "degraded", "warn", "down"].index)
-    print(f"{entry['ts']} overall={worst} " +
+    print(f"{entry['ts']} overall={worst} transition={transition} " +
           " ".join(f"{r['id']}={r['status']}({r['latency_ms']}ms)" for r in results))
     return 0
 

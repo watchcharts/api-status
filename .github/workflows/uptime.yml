@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: uptime
@@ -19,9 +20,37 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run checks
+        id: check
         env:
           WATCHCHARTS_API_KEY: ${{ secrets.WATCHCHARTS_API_KEY }}
         run: python3 scripts/check.py
+
+      - name: Open incident issue (notifies watchers by email)
+        if: steps.check.outputs.transition == 'down'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create incident --color d73a4a \
+            --description "API downtime" --force || true
+          gh issue create \
+            --title "🔴 API downtime detected ${{ steps.check.outputs.ts }}" \
+            --label incident \
+            --body "Automated monitoring detected downtime on api.watchcharts.com.
+
+          **Failing checks:** ${{ steps.check.outputs.details }}
+
+          Live status: https://status.api.watchcharts.com
+          This issue will be closed automatically when checks recover."
+
+      - name: Close incident issue (recovery)
+        if: steps.check.outputs.transition == 'recovered'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --label incident --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment \
+              "✅ Recovered at ${{ steps.check.outputs.ts }} — all checks passing again."
+          done
 
       - name: Commit history
         run: |

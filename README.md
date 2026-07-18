@@ -53,6 +53,16 @@ python3 -m http.server -d docs 8000   # view at http://localhost:8000
   (Level 2 endpoints cost 5–10 each).
 - **Retention:** `RETENTION_DAYS` in `check.py` (default 90).
 
+## Downtime email notifications
+
+When any check transitions to **down**, the workflow opens a GitHub issue
+labelled `incident`; on recovery it closes the issue with a comment. GitHub
+emails these to everyone **watching** the repo (Watch → Custom → Issues) — the
+status page has subscribe instructions, and open incidents render at the top
+of the page via the GitHub API. No email service, list management, or
+unsubscribe handling needed. Note: repo collaborators are auto-subscribed to
+their own activity; external subscribers must have a GitHub account.
+
 ## Notes
 
 - GitHub cron isn't exact; runs can be delayed a few minutes under load. Fine

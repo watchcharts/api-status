@@ -36,6 +36,16 @@
   .meta { color: var(--muted); font-size: 13px; }
   .nav { color: var(--muted); font-size: 13px; margin-top: 4px; }
   .nav a { color: var(--muted); }
+  .subscribe { margin-top: 10px; }
+  .subscribe summary { cursor: pointer; color: var(--muted); font-size: 13px;
+                       list-style: none; }
+  .subscribe summary::before { content: "✉ "; }
+  .subscribe[open] summary { color: var(--text); }
+  .subscribe .how { margin-top: 8px; font-size: 13px; color: var(--muted);
+                    background: var(--card); border: 1px solid var(--border);
+                    border-radius: 8px; padding: 12px 14px; max-width: 480px; }
+  .incident { border-left: 3px solid var(--down); }
+  .incident .name { color: var(--down); }
   .lat { color: var(--muted); font-size: 13px; margin-top: 4px; }
   footer { color: var(--muted); font-size: 13px; margin-top: 32px; text-align: center; }
   a { color: inherit; }
@@ -53,7 +63,23 @@
   <span class="meta" id="updated">Loading…</span>
 </header>
 <div id="banner" class="banner unknown">Loading status…</div>
+<div id="incidents"></div>
 <div id="endpoints"></div>
+<details class="subscribe">
+  <summary>Subscribe to downtime notices via email</summary>
+  <div class="how">
+    Downtime alerts are published as GitHub issues, which GitHub emails to
+    anyone watching the repository:
+    <ol style="margin:8px 0 0 18px; padding:0;">
+      <li>Sign in to GitHub and open
+          <a href="https://github.com/watchcharts/api-status">watchcharts/api-status</a></li>
+      <li>Click <b>Watch → Custom → Issues → Apply</b></li>
+    </ol>
+    You'll get an email when downtime is detected and when it recovers.
+    Past incidents:
+    <a href="https://github.com/watchcharts/api-status/issues?q=label%3Aincident">incident history</a>.
+  </div>
+</details>
 <footer>
   Checks run every 10 minutes against <code>api.watchcharts.com/v3</code>.
   Uptime shown over the past 90 days.<br>
@@ -112,6 +138,22 @@ async function main() {
     const d = new Date(now); d.setUTCDate(d.getUTCDate() - i);
     days.push(d.toISOString().slice(0, 10));
   }
+
+  // Show any open incident issues (labelled "incident" in the repo)
+  try {
+    const issues = await (await fetch(
+      "https://api.github.com/repos/watchcharts/api-status/issues?labels=incident&state=open"
+    )).json();
+    if (Array.isArray(issues) && issues.length) {
+      document.getElementById("incidents").innerHTML = issues.map(i => `
+        <div class="card incident">
+          <div class="row">
+            <span class="name"><a href="${i.html_url}">${i.title}</a></span>
+            <span class="meta">opened ${new Date(i.created_at).toLocaleString()}</span>
+          </div>
+        </div>`).join("");
+    }
+  } catch (e) { /* GitHub API rate-limited or offline - skip */ }
 
   const container = document.getElementById("endpoints");
   for (const ep of data.endpoints || []) {
