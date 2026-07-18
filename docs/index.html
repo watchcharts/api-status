@@ -29,7 +29,14 @@
   .path { color: var(--muted); font-family: ui-monospace, monospace; font-size: 13px; }
   .pct { font-variant-numeric: tabular-nums; }
   .bars { display: flex; gap: 2px; margin: 12px 0 6px; height: 32px; }
-  .bar { flex: 1; border-radius: 2px; background: var(--none); min-width: 2px; }
+  .bar { flex: 1; border-radius: 2px; background: var(--none); min-width: 0; }
+  .legend .label-30 { display: none; }
+  @media (max-width: 640px) {
+    /* Narrow screens: show only the last 30 days (hide first 60 of 90 bars) */
+    .bars .bar:nth-child(-n+60) { display: none; }
+    .legend .label-90 { display: none; }
+    .legend .label-30 { display: inline; }
+  }
   .bar.up { background: var(--up); } .bar.degraded { background: var(--degraded); }
   .bar.down { background: var(--down); }
   .legend { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
@@ -185,7 +192,8 @@ async function main() {
         const s = dayStatus(byDay[d]);
         return `<div class="bar ${s ?? ""}" title="${d}${s ? ": " + label[s] : ": no data"}"></div>`;
       }).join("")}</div>
-      <div class="legend"><span>${DAYS} days ago</span><span>Today</span></div>
+      <div class="legend"><span><span class="label-90">${DAYS} days ago</span><span
+        class="label-30">30 days ago</span></span><span>Today</span></div>
       <div class="lat">${lastCheck ? `Now: ${label[lastCheck.status] ?? lastCheck.status}
         · ${lastCheck.latency_ms} ms` : ""}${avgLat ? ` · avg ${avgLat} ms` : ""}</div>`;
     container.appendChild(card);
